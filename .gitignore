@@ -1,0 +1,13 @@
+# Whitelist: only code + viewer source are tracked. Data/outputs/envs live on /srv/scratch only.
+/*
+!/.gitignore
+!/README.md
+!/requirements.txt
+!/scripts/
+!/03_Output/
+/03_Output/*
+!/03_Output/viewer/
+/03_Output/viewer/*
+!/03_Output/viewer/index.html
+__pycache__/
+*.pyc

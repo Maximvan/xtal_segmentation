@@ -1,0 +1,297 @@
+<title>CLC Crystal Phagocytes 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed 3D stage, floating instrument panel (like an EM acquisition sidebar) */
+:root {
+  --bg: #e9ecef; --stage: #f6f7f8; --panel: rgba(255,255,255,.92); --fg: #1b2228; --muted: #5d6973;
+  --line: #cfd5da; --accent: #0072b2;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1114; --stage: #12171b; --panel: rgba(22,28,33,.92); --fg: #e3e8ec; --muted: #94a1ab;
+  --line: #2b353d; --accent: #56b4e9; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d1114; --stage: #12171b; --panel: rgba(22,28,33,.92); --fg: #e3e8ec; --muted: #94a1ab;
+  --line: #2b353d; --accent: #56b4e9; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); overflow: hidden; }
+#stage { position: fixed; inset: 0; background: var(--stage); }
+#stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#panel {
+  position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
+  width: 300px; max-width: calc(100vw - 24px); max-height: calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px 14px 10px; backdrop-filter: blur(6px); display: flex; flex-direction: column; gap: 14px;
+}
+h1 { font-size: 15px; font-weight: 600; margin: 0; text-wrap: balance; }
+.sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+h2 { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; }
+.layer { display: grid; grid-template-columns: 14px 1fr 86px; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+.layer label { display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0; }
+.sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); }
+.layer input[type=checkbox] { margin: 0; accent-color: var(--accent); }
+.vol { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+button, select {
+  font: 500 12px var(--sans); color: var(--fg); background: transparent; border: 1px solid var(--line);
+  border-radius: 5px; padding: 5px 9px; cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button[aria-pressed=true] { background: var(--accent); color: var(--stage); border-color: var(--accent); }
+.clip { display: grid; grid-template-columns: 70px 1fr; gap: 8px; align-items: center; font-size: 12px; }
+.note { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+#status { position: fixed; inset: 0; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; color: var(--muted); pointer-events: none; }
+#hide { position: fixed; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); }
+#scale { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; }
+#scale div { height: 4px; background: var(--fg); margin-bottom: 4px; }
+@media (max-width: 520px) { #panel { width: auto; right: max(12px, env(safe-area-inset-right, 0px)); max-height: 52%; } }
+</style>
+
+<div id="stage"></div>
+<div id="status">Loading meshes…</div>
+<aside id="panel">
+  <div>
+    <h1>Neutrophils on a Charcot-Leyden crystal</h1>
+    <div class="sub">FIB-SEM · 20 nm isotropic · automatic segmentation v2</div>
+  </div>
+  <section>
+    <h2>Sample</h2>
+    <div class="row" role="group" aria-label="Sample">
+      <button class="runbtn" data-run="run0910" aria-pressed="true">run_0910 · 7.5 µm</button>
+      <button class="runbtn" data-run="run0110" aria-pressed="false">run_0110 · 38 µm</button>
+    </div>
+  </section>
+  <section>
+    <h2>Crystal surface</h2>
+    <div id="surface" class="note"></div>
+  </section>
+  <section>
+    <h2>Structures · volume µm³</h2>
+    <div id="layers"></div>
+  </section>
+  <section>
+    <h2>Opacity of cells</h2>
+    <input id="cellOpacity" type="range" min="0" max="1" step="0.05" value="0.35" aria-label="Cell opacity">
+  </section>
+  <section>
+    <h2>Section plane</h2>
+    <div class="clip">
+      <select id="clipAxis" aria-label="Section axis">
+        <option value="none">Off</option>
+        <option value="x">X (length)</option>
+        <option value="y">Y (depth)</option>
+        <option value="z">Z (milling)</option>
+      </select>
+      <input id="clipPos" type="range" min="0" max="1" step="0.002" value="0.5" aria-label="Section position">
+    </div>
+  </section>
+  <section class="row">
+    <button id="spin" aria-pressed="false">Rotate</button>
+    <button id="reset">Reset view</button>
+    <button id="explode" aria-pressed="false">Spread cells</button>
+  </section>
+  <p class="note">Drag to rotate, scroll or pinch to zoom, right-drag to pan. Click a structure to identify it.
+    Segmentation is automatic (thresholds, watershed, MitoNet) and not yet proofread.</p>
+  <div class="note" id="picked"></div>
+</aside>
+<button id="hide">Hide panel</button>
+<div id="scale"><div id="scaleBar" style="width:80px"></div><span id="scaleLbl">1 µm</span></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const LABELS = {
+  crystal: "Crystal (galectin-10)", vacuole_crystal: "Vacuole around crystal",
+  mitochondria: "Mitochondria", other_vacuoles: "Other vacuoles", granules: "Dense granules",
+};
+const nice = n => LABELS[n] || n.replace(/^cell_(\d+)$/, "Cell $1").replace(/^nucleus_cell(\d+)$/, "Nucleus, cell $1");
+
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.localClippingEnabled = true;
+stage.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 500);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.4));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(1, 2, 3); camera.add(key); scene.add(camera);
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+const clipPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+let vols = {};
+let meshes = []; let box, center, size, root = null, exploded = false;
+const cache = {};
+const pct = x => (100 * x).toFixed(0) + "%";
+
+async function loadRun(run) {
+  const st = document.getElementById("status");
+  st.hidden = false; st.textContent = "Loading " + run + "…";
+  document.querySelectorAll(".runbtn").forEach(b => b.setAttribute("aria-pressed", b.dataset.run === run));
+  try {
+    if (!cache[run]) {
+      const [txt, data] = await Promise.all([
+        fetch(`scene_${run}.glb.txt`).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }),
+        fetch(`data_${run}.json`).then(r => r.json()).catch(() => ({})),
+      ]);
+      cache[run] = { bin: Uint8Array.from(atob(txt.trim()), ch => ch.charCodeAt(0)).buffer, data };
+    }
+  } catch (e) { st.textContent = run + " is still being processed. Check back later."; return; }
+  const { bin, data } = cache[run];
+  vols = data.volumes || {};
+  const s = data.surface || {};
+  const cellCov = Object.entries(s).filter(([k]) => k.startsWith("surface_fraction_cell_"))
+    .map(([k, v]) => `cell ${k.split("_").pop()} ${pct(v)}`).join(" · ");
+  document.getElementById("surface").innerHTML = s.crystal_surface_um2 ? `
+    Area ${s.crystal_surface_um2.toFixed(0)} µm² · covered by cells ${pct(s.covered_fraction)}<br>
+    ${cellCov}<br>
+    ${s.vacuole_thickness_nm_median !== undefined
+      ? `Vacuole thickness (crystal to membrane) median ${s.vacuole_thickness_nm_median.toFixed(0)} nm, 90th pct ${s.vacuole_thickness_nm_p90.toFixed(0)} nm<br><span style="opacity:.7">Boundaries redrawn at 10 nm</span>`
+      : `With lucent gap ${pct(s.covered_with_lumen_fraction)} of covered surface`}` : "No surface statistics";
+  if (root) { scene.remove(root); root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
+  meshes = []; exploded = false; ex.setAttribute("aria-pressed", false);
+  document.getElementById("layers").innerHTML = ""; document.getElementById("picked").textContent = "";
+  new GLTFLoader().parse(bin.slice(0), "", gltf => onScene(gltf), err => { st.textContent = "Could not load the 3D scene: " + (err.message || err); });
+}
+
+function onScene(gltf) {
+  root = gltf.scene;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const name = o.name || o.parent?.name;
+    let c = o.material?.color ? o.material.color.clone() : new THREE.Color(0.7, 0.7, 0.7);
+    if (o.geometry.attributes.color) {
+      const a = o.geometry.attributes.color; c = new THREE.Color().setRGB(a.getX(0), a.getY(0), a.getZ(0), THREE.SRGBColorSpace);
+      if (a.getX(0) > 1) c.setRGB(a.getX(0) / 255, a.getY(0) / 255, a.getZ(0) / 255, THREE.SRGBColorSpace);
+      o.geometry.deleteAttribute("color");
+    }
+    const isCell = /^cell_/.test(name);
+    o.geometry.computeVertexNormals();
+    o.material = new THREE.MeshStandardMaterial({
+      color: c, roughness: name === "crystal" ? 0.25 : 0.6, metalness: 0.0,
+      transparent: true, opacity: isCell ? 0.35 : name === "vacuole_crystal" ? 0.45 : 1,
+      depthWrite: !(isCell || name === "vacuole_crystal"), side: THREE.DoubleSide,
+      clippingPlanes: [],
+    });
+    o.renderOrder = isCell ? 3 : name === "vacuole_crystal" ? 2 : 1;
+    o.userData.name = name; o.userData.home = o.position.clone();
+    meshes.push(o);
+  });
+  scene.add(root);
+  box = new THREE.Box3().setFromObject(root);
+  center = box.getCenter(new THREE.Vector3()); size = box.getSize(new THREE.Vector3());
+  document.getElementById("cellOpacity").dispatchEvent(new Event("input"));
+  buildPanel(); resetView(); updateClip(); document.getElementById("status").hidden = true;
+}
+
+function order(n) {
+  if (n === "crystal") return 0; if (n === "vacuole_crystal") return 1;
+  if (n === "mitochondria") return 2; if (n === "other_vacuoles") return 3;
+  const m = n.match(/(\d+)/); return 10 + (m ? +m[1] * 2 : 0) + (n.startsWith("nucleus") ? 1 : 0);
+}
+function buildPanel() {
+  const host = document.getElementById("layers");
+  [...meshes].sort((a, b) => order(a.userData.name) - order(b.userData.name)).forEach((m, i) => {
+    const id = "layer-" + m.userData.name;
+    const row = document.createElement("div"); row.className = "layer";
+    const v = vols[m.userData.name];
+    row.innerHTML = `<input type="checkbox" id="${id}" checked>
+      <label for="${id}"><span class="sw" style="background:#${m.material.color.getHexString()}"></span>${nice(m.userData.name)}</label>
+      <span class="vol">${v != null ? v.toFixed(v < 10 ? 2 : 1) : ""}</span>`;
+    row.querySelector("input").addEventListener("change", e => { m.visible = e.target.checked; });
+    host.appendChild(row);
+  });
+}
+function resetView() {
+  const d = Math.max(size.x, size.y, size.z) * 1.25;
+  controls.target.copy(center);
+  camera.position.set(center.x + d * 0.35, center.y + d * 0.45, center.z + d * 0.9);
+  camera.near = d / 1000; camera.far = d * 20; camera.updateProjectionMatrix(); controls.update();
+}
+document.getElementById("reset").onclick = () => resetView();
+document.getElementById("cellOpacity").oninput = e => {
+  meshes.filter(m => /^cell_/.test(m.userData.name)).forEach(m => {
+    m.material.opacity = +e.target.value; m.material.depthWrite = +e.target.value > 0.95;
+  });
+};
+const spin = document.getElementById("spin");
+spin.onclick = () => { controls.autoRotate = !controls.autoRotate; spin.setAttribute("aria-pressed", controls.autoRotate); };
+
+// section plane
+const axisSel = document.getElementById("clipAxis"), posSl = document.getElementById("clipPos");
+function updateClip() {
+  const ax = axisSel.value;
+  meshes.forEach(m => { m.material.clippingPlanes = ax === "none" ? [] : [clipPlane]; m.material.needsUpdate = true; });
+  if (ax === "none" || !box) return;
+  const n = new THREE.Vector3(ax === "x" ? -1 : 0, ax === "y" ? -1 : 0, ax === "z" ? -1 : 0);
+  const lo = box.min[ax], hi = box.max[ax];
+  clipPlane.normal.copy(n); clipPlane.constant = lo + (hi - lo) * +posSl.value;
+}
+axisSel.onchange = updateClip; posSl.oninput = updateClip;
+
+// spread cells radially away from the crystal axis
+const ex = document.getElementById("explode");
+ex.onclick = () => {
+  exploded = !exploded; ex.setAttribute("aria-pressed", exploded);
+  meshes.forEach(m => {
+    const n = m.userData.name, k = (n.match(/cell_?(\d+)$/) || [])[1];
+    if (!k) return;
+    const cell = meshes.find(x => x.userData.name === "cell_" + k);
+    const cb = new THREE.Box3().setFromObject(cell).getCenter(new THREE.Vector3());
+    const dir = new THREE.Vector3(0, cb.y - center.y, cb.z - center.z);
+    if (dir.length() < 1e-3) dir.set(0, 1, 0);
+    dir.normalize().multiplyScalar(exploded ? Math.max(size.y, size.z) * 0.6 : 0);
+    m.position.copy(m.userData.home).add(dir);
+  });
+};
+
+// pick
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(); let downAt = null;
+renderer.domElement.addEventListener("pointerdown", e => downAt = [e.clientX, e.clientY]);
+renderer.domElement.addEventListener("pointerup", e => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(meshes.filter(m => m.visible), false)[0];
+  const v = hit && vols[hit.object.userData.name];
+  document.getElementById("picked").textContent = hit
+    ? `Selected: ${nice(hit.object.userData.name)}${v != null ? " · " + v.toFixed(2) + " µm³" : ""}` : "";
+});
+
+document.getElementById("hide").onclick = e => {
+  const p = document.getElementById("panel"); p.hidden = !p.hidden; e.target.textContent = p.hidden ? "Show panel" : "Hide panel";
+};
+
+// scale bar: pixel length of 1/2/5 um at the target distance
+const sb = document.getElementById("scaleBar"), sl = document.getElementById("scaleLbl");
+function updateScale() {
+  const dist = camera.position.distanceTo(controls.target);
+  const pxPerUm = stage.clientHeight / (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  const um = [0.5, 1, 2, 5, 10].find(u => u * pxPerUm > 60) || 10;
+  sb.style.width = (um * pxPerUm).toFixed(0) + "px"; sl.textContent = um + " µm";
+}
+renderer.setAnimationLoop(() => { controls.update(); if (box) updateScale(); renderer.render(scene, camera); });
+document.querySelectorAll(".runbtn").forEach(b => b.addEventListener("click", () => loadRun(b.dataset.run)));
+loadRun("run0910");
+</script>

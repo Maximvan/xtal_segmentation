@@ -112,14 +112,18 @@ nu = np.zeros(v.shape, bool)
 nu[bbn] = watershed(elev[bbn], markers=mk[bbn]) == 1
 del elev, mk, sd1
 nu = keep_large(eopen(fill_holes3d(nu), 2), 125000)  # > 1 um3
-nc = eclose(nu, 2)
-for ax in range(3):
-    f = np.moveaxis(nc, ax, 0).copy()
-    for i in range(f.shape[0]):
-        if f[i].any():
-            f[i] = ndi.binary_fill_holes(f[i])
-    nu |= np.moveaxis(f, 0, ax) & cells_mask
-nu = fill_holes3d(nu)
+# light-chromatin patches: holes of the (slightly closed) nucleus in XY sections and in 3D. Only
+# chromatin-like voxels are added (median grey < 180, i.e. not bright vesicles / cytoplasm), and no XZ/YZ
+# section fills (those drew straight, box-like edges between lobes).
+nc = eclose(nu, 3)
+f = nc.copy()
+for i in range(f.shape[0]):
+    if f[i].any():
+        f[i] = ndi.binary_fill_holes(f[i])
+f = fill_holes3d(f)
+nu |= f & ~nc & cells_mask & (med < 180)
+nu |= nc & cells_mask & (med < 180)  # small gaps closed only where they look like chromatin
+nu = keep_large(eopen(fill_holes3d(nu), 1), 125000)
 del nc, f
 log("nuclei mask", round(nu.sum() * VX**3, 1), "um3")
 

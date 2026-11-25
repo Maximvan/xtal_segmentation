@@ -104,7 +104,7 @@ mc = mesh(cr, target=50000)
 add("crystal", mc, C["crystal"]); vol["crystal"] = cr.sum() * u3
 if mc is not None and stats10:
     stats10["crystal_surface_um2"] = float(mc.area)  # mesh area; voxel-face counts overestimate
-add("vacuole_crystal", mesh(vx | cr, step=1 if TEN else 2, target=60000, sigma=0.8), C["vacuole"]); vol["vacuole_crystal"] = (vx & ~cr).sum() * u3
+add("vacuole_crystal", mesh(vx & ~cr, step=1 if TEN else 2, target=60000, sigma=0.8), C["vacuole"]); vol["vacuole_crystal"] = (vx & ~cr).sum() * u3
 for k, i in enumerate(cell_ids):
     cm = cells == i
     add(f"cell_{i}", mesh(cm, target=b_cell), CELLC[k % len(CELLC)]); vol[f"cell_{i}"] = cm.sum() * u3

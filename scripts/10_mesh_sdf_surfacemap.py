@@ -65,7 +65,7 @@ def add(name, me, rgb):
 
 ids = [int(i) for i in np.unique(cells) if i > 0]
 add("crystal", sdf_mesh(cr, target=50000), C["crystal"])
-add("vacuole_crystal", sdf_mesh(vac | cr, target=60000), C["vacuole"])
+add("vacuole_crystal", sdf_mesh(vac & ~cr, target=60000, sigma=0.5), C["vacuole"])
 for k, i in enumerate(ids):
     add(f"cell_{i}", sdf_mesh(cells == i, step=2, target=100000), CELLC[k % len(CELLC)])
     add(f"nucleus_cell{i}", sdf_mesh(L == 30 + i, step=2, target=45000), C["nucleus"])

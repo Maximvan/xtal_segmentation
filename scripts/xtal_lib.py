@@ -4,6 +4,8 @@ Runs are addressed by short name (run0910, run0110). Working grid = 20 nm isotro
 (bin4 XY, Z pairs averaged). Heavy filtering runs on the GPU (CuPy) in Z-chunks with a halo;
 connected components (cc3d) and distance transforms (edt) run multithreaded on the CPU.
 """
+import os
+os.environ.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")  # GPU numbers = nvidia-smi numbers (default order puts the A30 at 5!)
 from pathlib import Path
 import numpy as np
 import cc3d, edt
@@ -16,6 +18,10 @@ RUNS = {
     "run0110": dict(bin4=RAW / "run_0110/EM_447_CLEM1_1001_bin4.tif",
                     bin2=RAW / "run_0110/EM_447_CLEM1_1001_bin2.tif"),
 }
+# new samples (2026-11-25), resampled to the pipeline grids by 15_import_dataset.py
+DERIVED = ROOT / "01_Input/derived"
+for _n in ("largeXtal_cM", "smallXtal_6M", "smallXtal_6D2P"):
+    RUNS[_n] = dict(bin4=DERIVED / f"{_n}_20nm.tif", bin2=DERIVED / f"{_n}_10nm.tif")
 VX = 0.02  # um, working grid
 NT = 16    # CPU threads
 

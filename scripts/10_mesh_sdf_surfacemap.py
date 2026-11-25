@@ -66,9 +66,10 @@ def add(name, me, rgb):
 ids = [int(i) for i in np.unique(cells) if i > 0]
 add("crystal", sdf_mesh(cr, target=50000), C["crystal"])
 add("vacuole_crystal", sdf_mesh(vac & ~cr, target=60000, sigma=0.5), C["vacuole"])
+bc, bn = min(100000, 300000 // max(len(ids), 1)), min(45000, 135000 // max(len(ids), 1))  # keep file < 16 MB
 for k, i in enumerate(ids):
-    add(f"cell_{i}", sdf_mesh(cells == i, step=2, target=100000), CELLC[k % len(CELLC)])
-    add(f"nucleus_cell{i}", sdf_mesh(L == 30 + i, step=2, target=45000), C["nucleus"])
+    add(f"cell_{i}", sdf_mesh(cells == i, step=2, target=bc), CELLC[k % len(CELLC)])
+    add(f"nucleus_cell{i}", sdf_mesh(L == 30 + i, step=2, target=bn), C["nucleus"])
 add("mitochondria", sdf_mesh(load(D / "mito10") > 0, target=50000, sigma=0.5), C["mito"])
 add("granules", sdf_mesh(load(D / "gran10").astype(bool), target=40000, sigma=0.5), C["granules"])
 add("dense_on_crystal", sdf_mesh(dense, target=40000, sigma=0.5), C["dense"])

@@ -36,17 +36,23 @@ ok = erode(ok, 2)
 save(D / "ok", ok)
 del dark, rows
 
-# ---- crystal: largest dark homogeneous body
-cr = (g < 148) & ok
-cr = eopen(cr, 2)
-cr = largest(cr)
-cr = eclose(cr, 3)
-cr = fill_holes3d(cr)
-# resin-filled holes / pits / cracks inside the crystal belong to the crystal body:
-# close with a 400 nm sphere and fill, but only add voxels that are not textured cytoplasm
-crc = fill_holes3d(eclose(cr, 20))
-cr |= crc & (sd < 4.5)
-cr = fill2d(fill_holes3d(cr))
+# ---- crystal: from the U-Net trained on Jasmijn's annotations (14) if available, else the threshold rule
+NETCR = (D / "crystal_net.npz").exists()
+if NETCR:
+    cr = load(D / "crystal_net").astype(bool) & ok
+    log("crystal from U-Net (14)")
+cr0 = (g < 148) & ok
+if not NETCR:
+    cr = eopen(cr0, 2)
+    cr = largest(cr)
+    cr = eclose(cr, 3)
+    cr = fill_holes3d(cr)
+    # resin-filled holes / pits / cracks inside the crystal belong to the crystal body:
+    # close with a 400 nm sphere and fill, but only add voxels that are not textured cytoplasm
+    crc = fill_holes3d(eclose(cr, 20))
+    cr |= crc & (sd < 4.5)
+    cr = fill2d(fill_holes3d(cr))
+del cr0
 log("crystal", round(cr.sum() * VX**3, 1), "um3")
 
 # ---- tissue (not resin)

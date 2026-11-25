@@ -65,6 +65,9 @@ button[aria-pressed=true] { background: var(--accent); color: var(--stage); bord
     <div class="row" role="group" aria-label="Sample">
       <button class="runbtn" data-run="run0910" aria-pressed="true">run_0910 · 7.5 µm</button>
       <button class="runbtn" data-run="run0110" aria-pressed="false">run_0110 · 38 µm</button>
+      <button class="runbtn" data-run="largeXtal_cM" aria-pressed="false">Large crystal cM</button>
+      <button class="runbtn" data-run="smallXtal_6M" aria-pressed="false">Small crystal 6M (+ LM)</button>
+      <button class="runbtn" data-run="smallXtal_6D2P" aria-pressed="false">Small crystal 6D2P</button>
     </div>
   </section>
   <section>
@@ -116,7 +119,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const LABELS = {
   crystal: "Crystal (galectin-10)", vacuole_crystal: "Vacuole around crystal",
-  mitochondria: "Mitochondria", other_vacuoles: "Other vacuoles", granules: "Dense granules", dense_on_crystal: "Dense material on crystal",
+  mitochondria: "Mitochondria", other_vacuoles: "Other vacuoles", granules: "Dense granules", dense_on_crystal: "Dense material on crystal", LM_FITC: "LM · FITC", LM_DAPI: "LM · DAPI", LM_NET_stain_1: "LM · NET stain 1", LM_NET_stain_2: "LM · NET stain 2",
 };
 const nice = n => LABELS[n] || n.replace(/^cell_(\d+)$/, "Cell $1").replace(/^nucleus_cell(\d+)$/, "Nucleus, cell $1");
 

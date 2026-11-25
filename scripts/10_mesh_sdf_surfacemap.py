@@ -64,8 +64,29 @@ def add(name, me, rgb):
 
 
 ids = [int(i) for i in np.unique(cells) if i > 0]
-add("crystal", sdf_mesh(cr, target=50000), C["crystal"])
-add("vacuole_crystal", sdf_mesh(vac & ~cr, target=60000, sigma=0.5), C["vacuole"])
+def occ_mesh(occ, b10, target):
+    """marching cubes at 50 % occupancy of native-resolution masks on the 10 nm grid (sub-voxel accurate)"""
+    o = np.pad(ndi.gaussian_filter(occ.astype(np.float32), 0.5), 1)
+    if o.max() < 0.5:
+        return None
+    v, f, _, _ = marching_cubes(o, 0.5)
+    v = ((v - 1) + np.array([b[0] for b in b10]) + OFF)[:, ::-1] * V10
+    v[:, 1] *= -1
+    if target and len(f) > target:
+        v, f = fs.simplify(v.astype(np.float32), f.astype(np.int32), target_reduction=1 - target / len(f))
+    me = trimesh.Trimesh(v, f, process=True)
+    trimesh.smoothing.filter_taubin(me, iterations=3)
+    return me
+
+
+if (D / "native_occ10.npz").exists():  # crystal + sac from the native-resolution U-Net (18)
+    nat = np.load(D / "native_occ10.npz")
+    add("crystal", occ_mesh(nat["crystal"], nat["bbox10"], 50000), C["crystal"])
+    add("vacuole_crystal", occ_mesh(nat["sac"], nat["bbox10"], 60000), C["vacuole"])
+    print("crystal + sac meshes from native resolution", flush=True)
+else:
+    add("crystal", sdf_mesh(cr, target=50000), C["crystal"])
+    add("vacuole_crystal", sdf_mesh(vac & ~cr, target=60000, sigma=0.5), C["vacuole"])
 bc, bn = min(100000, 300000 // max(len(ids), 1)), min(45000, 135000 // max(len(ids), 1))  # keep file < 16 MB
 for k, i in enumerate(ids):
     add(f"cell_{i}", sdf_mesh(cells == i, step=2, target=bc), CELLC[k % len(CELLC)])
@@ -73,6 +94,9 @@ for k, i in enumerate(ids):
 add("mitochondria", sdf_mesh(load(D / "mito10") > 0, target=50000, sigma=0.5), C["mito"])
 add("granules", sdf_mesh(load(D / "gran10").astype(bool), target=40000, sigma=0.5), C["granules"])
 add("dense_on_crystal", sdf_mesh(dense, target=40000, sigma=0.5), C["dense"])
+for ply in sorted((O / "clem").glob("*.ply")) if (O / "clem").exists() else []:  # CLEM LM channels (19)
+    me = trimesh.load(ply)
+    add(f"LM_{ply.stem}", me, tuple(int(x) for x in me.visual.face_colors[0][:3]))
 scene.export(O / "scene_hq.glb")
 (ROOT / f"03_Output/viewer/scene_{run}_hq.glb.txt").write_bytes(base64.b64encode((O / "scene_hq.glb").read_bytes()))
 json.dump(areas, open(E / "mesh_hq_areas_um2.json", "w"), indent=1)

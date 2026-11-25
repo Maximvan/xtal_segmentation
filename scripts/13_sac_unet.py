@@ -188,10 +188,12 @@ def evaluate():
     res = {}
     # Test 1: students' labels on run0910
     labs = ilp_labels(ILA / "Large xtal/Large xtal_3.ilp")
+    raw_shape = tifffile.memmap(RUNS["run0910"]["bin2"]).shape
     zs = sorted(labs)
     conf = np.zeros((NC, NC), np.int64)  # rows: student label, cols: prediction
     for z, X in run_slices("run0910", zs):
         pr = predict(net, X).argmax(0)
+        pr = np.pad(pr, ((0, max(0, raw_shape[1] - pr.shape[0])), (0, max(0, raw_shape[2] - pr.shape[1]))), mode="edge")
         for y0, y1, x0, x1, d in labs[z]:
             m = d > 0
             np.add.at(conf, (d[m].astype(int) - 1, pr[y0:y1, x0:x1][m]), 1)
@@ -214,7 +216,7 @@ def evaluate():
         m = meta[name]
         h, w = np.array(Image.open(A / name)).shape
         _, X = next(run_slices(m["run"], [m["z10"]], m["y0"], m["y0"] + h, m["x0"], m["x0"] + w))
-        pr = predict(net, X).argmax(0)
+        pr = predict(net, X).argmax(0)[:h, :w]
         cr = ndi.binary_fill_holes(ndi.binary_opening(pr == 1, iterations=2))
         lab_, nl = ndi.label(cr)
         if nl:
@@ -237,7 +239,8 @@ def evaluate():
             out[k] = dict(median_nm=float(np.median(dd)), within30=float(np.mean(dd <= 30)))
         t2[name] = out
         log(name, out)
-        o = np.stack([np.clip((X[1] - 110) / 105 * 255, 0, 255)] * 3, -1).astype(np.uint8)
+        k_ = max(1, X.shape[1] // pr.shape[0])  # full-res input (17): show on the prediction grid
+        o = np.stack([np.clip((X[1, ::k_, ::k_][:h, :w] - 110) / 105 * 255, 0, 255)] * 3, -1).astype(np.uint8)
         o[sac] = (0.5 * o[sac] + 0.5 * np.array((240, 228, 66))).astype(np.uint8)
         o[find_boundaries(cr)] = (0, 0, 160)
         for k, col in (("vacuole", (0, 0, 0)), ("crystal", (213, 94, 0))):

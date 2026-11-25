@@ -1,7 +1,7 @@
 #!/bin/bash
 cd /srv/scratch/maximva/xtal_segmentation/scripts
 export CUDA_VISIBLE_DEVICES=5
-while kill -0 3985374 2>/dev/null; do sleep 10; done
+# (no wait)
 PY=../env/xtal/bin/python
 for STEP in 07_refine10 05_mito_and_meshes 06_qc_overlays; do
   echo "$(date +%H:%M) run0910 $STEP running" >> ../logs/STATUS

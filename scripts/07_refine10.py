@@ -26,9 +26,9 @@ D, O = proc_dir(run), out_dir(run)
 T0 = time.time()
 log = lambda *a: print(f"[{time.time() - T0:6.0f}s]", *a, flush=True)
 
-GREY_STEP = 171.5  # vacuole content ~165 vs cytoplasm ~177 (normalised grey, 10 nm)
-GREY_DARK = 156.0  # darker than vacuole content = granule / dense organelle against the crystal: stop
-DMAX, DMIN, SIG = 25, 2, 4.0  # vacuole search depth 250 nm, min 20 nm; surface smoothing 40 nm
+GREY_STEP = 176.0  # vacuole content ~160 vs cytoplasm ~185; tuned on a hand-traced vacuole outline (run0110, IoU ~0.7)
+GREY_DARK = 150.0  # darker than vacuole content (p10 ~152) = granule / dense material against the crystal: stop
+DMAX, DMIN, SIG = 30, 2, 4.0  # vacuole search depth 300 nm, min 20 nm; surface smoothing 40 nm
 SMOOTH = 1.5  # 3D label smoothing after snapping (removes slice-to-slice noise strips)
 BAND = 4  # +-40 nm around the 20 nm boundary
 
@@ -68,12 +68,16 @@ hi20 = [int(min(i[-1] + 5, s, rs // 2)) for i, s, rs in zip(idx, cr20.shape, raw
 lo10, n10 = [2 * l for l in lo20], [2 * (h - l) for l, h in zip(lo20, hi20)]
 json.dump(dict(lo10=lo10, shape10=n10, lo20=lo20, hi20=hi20), open(D / "crop10.json", "w"))
 log("crop10", lo10, n10)
+import os
+DEN = load(D / "den10") if os.environ.get("DEN") == "1" and (D / "den10.npz").exists() else None
+log("input", "denoised (08)" if DEN is not None else "raw")
 L10 = np.zeros(n10, np.uint8)
 vac10 = np.zeros(n10, bool)
 gran10 = np.zeros(n10, bool)
+dense10 = np.zeros(n10, bool)
 del fg
 
-n_surf = n_cov = lum_vox = cr_vox = 0
+n_surf = n_cov = lum_vox = cr_vox = dense_vox = n_dense = n_vac = 0
 cov, thick = {}, []
 CH, HALO = 128, 24
 for c0 in range(0, n10[0], CH):
@@ -82,8 +86,11 @@ for c0 in range(0, n10[0], CH):
     sl20 = (slice(lo20[0] + a0 // 2, lo20[0] + a1 // 2), slice(lo20[1], hi20[1]), slice(lo20[2], hi20[2]))
     L = L20[sl20].repeat(2, 0).repeat(2, 1).repeat(2, 2)
     zr = np.arange(lo10[0] + a0, lo10[0] + a1)
-    sub = raw[zr[0]:zr[-1] + 1, lo10[1]:lo10[1] + n10[1], lo10[2]:lo10[2] + n10[2]].astype(np.float32)
-    sub = np.clip((sub - resin[np.minimum(zr // 2, len(resin) - 1)][:, None, None]) * gain + 200, 0, 255)
+    if DEN is not None:
+        sub = DEN[a0:a1].astype(np.float32)
+    else:
+        sub = raw[zr[0]:zr[-1] + 1, lo10[1]:lo10[1] + n10[1], lo10[2]:lo10[2] + n10[2]].astype(np.float32)
+        sub = np.clip((sub - resin[np.minimum(zr // 2, len(resin) - 1)][:, None, None]) * gain + 200, 0, 255)
 
     # edge map (GPU)
     s = cp.asarray(sub)
@@ -118,6 +125,10 @@ for c0 in range(0, n10[0], CH):
     L = cp.asnumpy(Ls)
     del Lc, best, Ls
     cp.get_default_memory_pool().free_all_blocks()
+    nucv = L >= 30
+    if nucv.any():
+        L[nucv & (edt.edt(L >= 10, parallel=NT) <= 2)] -= 20  # nucleus i -> cytoplasm i near the cell edge
+    del nucv
     cr = L == 2
     # crystal: keep the main body, fill holes per slice (resin pits inside the crystal)
     lab = cc3d.connected_components(cr, connectivity=6)
@@ -133,6 +144,7 @@ for c0 in range(0, n10[0], CH):
 
     # 2. crystal vacuole (radial first grey step)
     vac = np.zeros(L.shape, bool)
+    dense = np.zeros(L.shape, bool)
     k0, k1 = c0 - a0, c0 - a0 + (c1 - c0)
     if cr.any():
         zz, yy, xx = np.where(edt.edt(~cr, parallel=NT) <= DMAX + 2)
@@ -156,7 +168,15 @@ for c0 in range(0, n10[0], CH):
             prof[:, k - 1] = cp.asnumpy(cp.where(Cs > 0.05, Ss / cp.maximum(Cs, 1e-6), 255))
             del Sx, Cx, Ss, Cs
         hit = (prof[:, DMIN:] > GREY_STEP) | (prof[:, DMIN:] < GREY_DARK)
-        b = np.where(hit.any(1), hit.argmax(1) + DMIN, DMAX).astype(np.float32)
+        b = np.where(hit.any(1), hit.argmax(1) + DMIN, DMAX)
+        # a vacuole needs a real band: >= 60 nm wide and >= 4 grey darker than the 50 nm beyond it;
+        # otherwise the crystal is in direct contact (only the 20 nm membrane layer is drawn)
+        cs_ = np.concatenate([np.zeros((prof.shape[0], 1), np.float32), np.cumsum(np.minimum(prof, 255), 1)], 1)
+        rows = np.arange(b.size)
+        inner = (cs_[rows, b] - cs_[rows, DMIN]) / np.maximum(b - DMIN, 1)
+        e_ = np.minimum(b + 5, DMAX)
+        outer = (cs_[rows, e_] - cs_[rows, b]) / np.maximum(e_ - b, 1)
+        b = np.where((b >= 6) & (outer - inner > 4), b, 0).astype(np.float32)  # >= 60 nm: thinner = crystal edge blur
         B = np.zeros(crb.size, np.float32); B[sflat] = b
         B = cp.asarray(B.reshape(crb.shape))
         w2 = cndi.gaussian_filter(cp.asarray(surf, dtype=cp.float32), SIG / 2) + 1e-6
@@ -165,10 +185,21 @@ for c0 in range(0, n10[0], CH):
         cp.get_default_memory_pool().free_all_blocks()
         bvox = np.zeros(crb.shape, np.float32)
         bvox[zone] = B2[fi]
-        lum = zone & (dcr <= bvox)
+        lum = zone & (dcr <= bvox) & (bvox >= 3)
         body = crb | lum
         vb = lum | ((edt.edt(~body, parallel=NT) <= 2) & cellb)
         vac[cb] = vb
+        # dense material against the crystal: darker than vacuole content, beyond the edge blur, touching the surface zone
+        g15b = cp.asnumpy(cndi.gaussian_filter(cp.asarray(sub[cb]), (2, 1.5, 1.5)))
+        cand = (g15b < GREY_DARK) & cellb & (dcr >= 3) & (dcr <= DMAX) & ~lum
+        cand = ndi.binary_opening(cand, iterations=1)
+        ll = cc3d.connected_components(cand, connectivity=6)
+        ids = np.unique(ll[cand & (dcr <= 5)]); ids = ids[ids > 0]
+        csz = np.bincount(ll.ravel())
+        ids = ids[csz[ids] > 1000]
+        dn = np.isin(ll, ids)
+        dense[cb] |= dn
+        del g15b, cand, ll
         # 3. stats on the chunk core (surface voxels with a cell within 60 nm)
         core = np.zeros(crb.shape, bool)
         cz0, cz1 = max(k0 - cb[0].start, 0), max(k1 - cb[0].start, 0)
@@ -182,8 +213,11 @@ for c0 in range(0, n10[0], CH):
                 cov[int(i)] = cov.get(int(i), 0) + int(n)
         thick.append((B2.reshape(crb.shape)[sc & near] * 10).astype(np.float16))
         lum_vox += int((lum & core).sum())
+        dense_vox += int((dn & core).sum())
+        n_dense += int((sc & (edt.edt(~dn, parallel=NT) <= 8)).sum())
+        n_vac += int((sc & near & (B2.reshape(crb.shape) >= 3)).sum())
         cr_vox += int((crb & core).sum())
-        del dcr, ind, zone, fi, d, gv, gv_, bvox, lum, body, vb, near, lab_near, B2, surf, crb, cellb, gb
+        del dn, dcr, ind, zone, fi, d, gv, gv_, bvox, lum, body, vb, near, lab_near, B2, surf, crb, cellb, gb
     # dense granule candidates (10 nm): dark compact bodies in the cytoplasm, away from the crystal edge
     cyto = (L >= 10) & (L < 30)
     if cyto.any():
@@ -193,6 +227,7 @@ for c0 in range(0, n10[0], CH):
         del g15, gc
     L10[c0:c1] = L[k0:k1]
     vac10[c0:c1] = vac[k0:k1]
+    dense10[c0:c1] = dense[k0:k1]
     log(f"chunk {c0}-{c1}  surf {n_surf} covered {n_cov}")
     del L, vac, cell, cellid, cr, g1, sub
 
@@ -202,9 +237,12 @@ stats = dict(
     crystal_volume_um3=cr_vox * 1e-6,
     crystal_surface_um2=n_surf * 1e-4,
     covered_fraction=n_cov / max(n_surf, 1),
-    vacuole_thickness_nm_median=float(np.median(thick)) if thick.size else 0.0,
-    vacuole_thickness_nm_p90=float(np.percentile(thick, 90)) if thick.size else 0.0,
+    vacuole_thickness_nm_median=float(np.median(thick[thick >= 30])) if (thick >= 30).any() else 0.0,  # where a vacuole exists
+    vacuole_thickness_nm_p90=float(np.percentile(thick[thick >= 30], 90)) if (thick >= 30).any() else 0.0,
     vacuole_lumen_volume_um3=lum_vox * 1e-6,
+    vacuole_surface_fraction=n_vac / max(n_surf, 1),
+    dense_on_crystal_volume_um3=dense_vox * 1e-6,
+    dense_on_crystal_surface_fraction=n_dense / max(n_surf, 1),
 )
 stats.update({f"surface_fraction_cell_{i}": n / max(n_surf, 1) for i, n in sorted(cov.items())})
 log(stats)
@@ -215,6 +253,7 @@ with open(O / "crystal_surface.csv", "w") as fh:
         fh.write(f"{k},{v}\n")
 save(D / "lab10", L10)
 save(D / "vac10", vac10)
+save(D / "dense10", dense10)
 
 # mitochondria at 10 nm from MitoNet's 10 nm probabilities (prob > 0.5, cytoplasm, > 0.005 um3)
 cytoA = (L10 >= 10) & (L10 < 30)
@@ -235,7 +274,7 @@ del mi, ml
 log("mitochondria 10 nm", int(m10.max()))
 
 # dense granules 10 nm: opened candidates, compact, 100-750 nm (as in 02, voxel counts x8)
-gr = eopen(gran10 & (m10 == 0), 2)
+gr = eopen(gran10 & (m10 == 0) & ~dense10, 2)
 gl = cc3d.connected_components(gr, connectivity=6)
 st = cc3d.statistics(gl)
 cnt = st["voxel_counts"]

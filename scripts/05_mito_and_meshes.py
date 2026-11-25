@@ -82,7 +82,7 @@ def mesh(mask, step=2, target=None, sigma=1.0, vx=None, off=None):
     return m
 
 
-C = dict(crystal=(86, 180, 233), vacuole=(240, 228, 66), nucleus=(0, 114, 178),
+C = dict(dense=(0, 158, 115), crystal=(86, 180, 233), vacuole=(240, 228, 66), nucleus=(0, 114, 178),
          mito=(213, 94, 0), vac_other=(204, 121, 167), granules=(80, 80, 80))
 CELLC = [(230, 159, 0), (200, 200, 200), (170, 150, 120), (150, 170, 190), (210, 190, 160),
          (130, 130, 130), (190, 160, 200), (160, 190, 160)]
@@ -112,6 +112,10 @@ for k, i in enumerate(cell_ids):
     add(f"nucleus_cell{i}", mesh(nm, target=b_nuc), C["nucleus"]); vol[f"nucleus_cell{i}"] = nm.sum() * u3
 add("mitochondria", mesh(ml > 0, step=1 if not TEN else 2, target=50000, sigma=0.8), C["mito"]); vol["mitochondria"] = (ml > 0).sum() * u3
 z0 = np.zeros(3)
+if TEN and (D / "dense10.npz").exists():
+    dn = load(D / "dense10").astype(bool)
+    add("dense_on_crystal", mesh(dn, step=1, target=40000, sigma=0.8), C["dense"]); vol["dense_on_crystal"] = dn.sum() * u3
+    del dn
 if GR10:
     add("granules", mesh(gr, step=1, target=40000, sigma=0.8), C["granules"]); vol["granules"] = gr.sum() * u3
 else:

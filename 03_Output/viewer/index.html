@@ -116,7 +116,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const LABELS = {
   crystal: "Crystal (galectin-10)", vacuole_crystal: "Vacuole around crystal",
-  mitochondria: "Mitochondria", other_vacuoles: "Other vacuoles", granules: "Dense granules",
+  mitochondria: "Mitochondria", other_vacuoles: "Other vacuoles", granules: "Dense granules", dense_on_crystal: "Dense material on crystal",
 };
 const nice = n => LABELS[n] || n.replace(/^cell_(\d+)$/, "Cell $1").replace(/^nucleus_cell(\d+)$/, "Nucleus, cell $1");
 
@@ -166,7 +166,9 @@ async function loadRun(run) {
     Area ${s.crystal_surface_um2.toFixed(0)} µm² · covered by cells ${pct(s.covered_fraction)}<br>
     ${cellCov}<br>
     ${s.vacuole_thickness_nm_median !== undefined
-      ? `Vacuole thickness (crystal to membrane) median ${s.vacuole_thickness_nm_median.toFixed(0)} nm, 90th pct ${s.vacuole_thickness_nm_p90.toFixed(0)} nm<br><span style="opacity:.7">Boundaries redrawn at 10 nm</span>`
+      ? `Vacuole (band + enclosing membrane) on ${pct(s.vacuole_surface_fraction || 0)} of surface${s.vacuole_thickness_nm_median ? `, thickness median ${s.vacuole_thickness_nm_median.toFixed(0)} nm (90th pct ${s.vacuole_thickness_nm_p90.toFixed(0)} nm)` : ""}<br>
+         ${s.dense_on_crystal_surface_fraction !== undefined ? `Dense material on crystal: ${pct(s.dense_on_crystal_surface_fraction)} of surface, ${s.dense_on_crystal_volume_um3.toFixed(2)} µm³<br>` : ""}
+         <span style="opacity:.7">Boundaries redrawn at 10 nm</span>`
       : `With lucent gap ${pct(s.covered_with_lumen_fraction)} of covered surface`}` : "No surface statistics";
   if (root) { scene.remove(root); root.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); }
   meshes = []; exploded = false; ex.setAttribute("aria-pressed", false);

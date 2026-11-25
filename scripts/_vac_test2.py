@@ -9,7 +9,8 @@ from xtal_lib import RUNS
 
 S = sys.argv[1]
 R_THR = float(sys.argv[2])
-DENSE = float(sys.argv[3])
+DENSE = float(sys.argv[3]); STEP, DARK, EV = float(sys.argv[4]), float(sys.argv[5]), float(sys.argv[6])
+U = np.load(S + '/user_vac_mask.npy')
 DMAX, DMIN, SIG = 25, 2, 4.0
 
 
@@ -46,13 +47,14 @@ def test(run, z20, ys, xs, name):
     surf, sflat, fi, (pg, pr) = profiles(cr, [g, R], zone, dcr, ind)
     pg = np.nan_to_num(pg, nan=255)
     pr = np.nan_to_num(pr, nan=0)
-    out_band = (pg[:, DMIN:] > 171.5) | (pg[:, DMIN:] < 156)
+    out_band = (pg[:, DMIN:] > STEP) | (pg[:, DMIN:] < DARK)
     b = np.where(out_band.any(1), out_band.argmax(1) + DMIN, DMAX)
-    # membrane evidence: a ridge peak within b-2 .. b+3 of the grey step
+    # band evidence: mean grey of the band (DMIN..b) vs the 50 nm just beyond it
     ok = np.zeros(b.size, bool)
     for j in range(b.size):
-        lo_, hi_ = max(b[j] - 2, 0), min(b[j] + 4, DMAX)
-        ok[j] = pr[j, lo_:hi_].max() > R_THR
+        if b[j] >= 4:
+            inner = pg[j, DMIN:b[j]].mean(); outer = pg[j, b[j]:min(b[j] + 5, DMAX)].mean()
+            ok[j] = outer - inner > EV
     b = np.where(ok & (b >= 4), b, 0).astype(np.float32)
     B = np.zeros(cr.size, np.float32); B[sflat] = b
     B = B.reshape(cr.shape)
@@ -62,13 +64,15 @@ def test(run, z20, ys, xs, name):
     vac = lum | ((edt.edt(~(lum | cr)) <= 2) & ~cr & tissue)
     # dense material touching the crystal (beyond the edge blur)
     g15 = ndi.gaussian_filter(sub, (2, 1.5, 1.5))
-    cand = (g15 < DENSE) & tissue & (dcr >= 3) & (dcr <= DMAX)
+    cand = (g15 < DENSE) & tissue & (dcr >= 3) & (dcr <= DMAX) & ~lum
     cand = ndi.binary_opening(cand, iterations=1)
     ll = cc3d.connected_components(cand, connectivity=6)
     ids = np.unique(ll[cand & (dcr <= 5)]); ids = ids[ids > 0]
     cs = np.bincount(ll.ravel())
     ids = ids[cs[ids] > 1000]
     dense = np.isin(ll, ids)
+    if name == '0110':
+        print('  IoU vs user', round(float((lum[20] & U).sum() / (lum[20] | U).sum()), 3))
     print(name, "vac-with-membrane surface frac", round(float((b > 0).mean()), 3), "median thick px", np.median(b[b > 0]) if (b > 0).any() else 0,
           "| dense vox", int(dense.sum()))
     k = 20
@@ -82,4 +86,3 @@ def test(run, z20, ys, xs, name):
 
 test("run0110", 407, slice(200, 580), slice(1060, 1520), "0110")
 test("run0910", 279, slice(300, 700), slice(250, 1300), "0910")
-test("run0910", 300, slice(0, 800), slice(2100, 2900), "0910tip")

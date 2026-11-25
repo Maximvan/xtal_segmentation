@@ -2,7 +2,7 @@
 
 10 nm mode: thin outlines on the normalised bin2 image, so you can judge whether they sit on the lines.
 Colours: cell outline per cell (orange / sky blue / green ...), crystal dark blue, nucleus magenta,
-crystal vacuole yellow, mitochondria vermillion, dense granules black.
+crystal vacuole yellow, mitochondria vermillion, dense granules black, dense material on crystal green.
 usage: python 06_qc_overlays.py run0910|run0110
 Output: 03_Output/<run>/qc/*.png
 """
@@ -28,6 +28,7 @@ if (D / "lab10.npz").exists():
     vac = load(D / "vac10").astype(bool)
     mi = load(D / "mito10") > 0
     gr = load(D / "gran10").astype(bool) if (D / "gran10.npz").exists() else np.zeros_like(mi)
+    dn = load(D / "dense10").astype(bool) if (D / "dense10.npz").exists() else np.zeros_like(mi)
     raw = tifffile.memmap(RUNS[run]["bin2"])
     norm = json.load(open(D / "norm.json"))
     resin, gain = np.array(norm["resin"]), norm["gain"]
@@ -55,6 +56,7 @@ if (D / "lab10.npz").exists():
         o[b] = CELLC[np.minimum(cid[b], len(CELLC) - 1)]
         o[find_boundaries(m, mode="inner")] = (213, 94, 0)
         o[find_boundaries(gr[sl], mode="inner")] = (0, 0, 0)
+        o[find_boundaries(dn[sl], mode="inner")] = (0, 158, 115)
         o[find_boundaries(l >= 30, mode="inner")] = (255, 0, 255)
         o[find_boundaries(l == 2, mode="inner")] = (0, 0, 160)
         o[find_boundaries(va, mode="outer") & (l != 2)] = (200, 180, 0)

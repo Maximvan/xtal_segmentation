@@ -23,9 +23,22 @@ def crop(a):
     return np.pad(a, [(0, k - s) for k, s in zip(n, a.shape)])
 
 
+def smooth3d(m, sig=(2.0, 1.5, 1.5)):
+    """soft majority in 3D (GPU, Z-chunks): the U-Net predicts slice by slice, so single off slices make spikes"""
+    import cupy as cp
+    from cupyx.scipy import ndimage as cnd
+    out = np.zeros(m.shape, bool)
+    for z0 in range(0, m.shape[0], 96):
+        a0, a1 = max(z0 - 8, 0), min(z0 + 104, m.shape[0])
+        g = cnd.gaussian_filter(cp.asarray(m[a0:a1], dtype=cp.float32), sig) > 0.5
+        out[z0:z0 + 96] = cp.asnumpy(g)[z0 - a0:z0 - a0 + 96]
+        cp.get_default_memory_pool().free_all_blocks()
+    return out
+
+
 L = load(D / "lab10")
-cr = crop(load(D / "net_crystal10").astype(bool))
-sac = crop(load(D / "net_sac10").astype(bool))
+cr = smooth3d(crop(load(D / "net_crystal10").astype(bool)))
+sac = smooth3d(crop(load(D / "net_sac10").astype(bool)) & ~cr)
 old = L == 2
 log("crystal vox old", int(old.sum()), "net", int(cr.sum()))
 # voxels that stop being crystal: take the neighbouring label (resin / cell / nucleus / other tissue)

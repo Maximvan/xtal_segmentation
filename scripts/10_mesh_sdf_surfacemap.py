@@ -93,7 +93,7 @@ for k, i in enumerate(ids):
     add(f"nucleus_cell{i}", sdf_mesh(L == 30 + i, step=2, target=bn), C["nucleus"])
 add("mitochondria", sdf_mesh(load(D / "mito10") > 0, target=50000, sigma=0.5), C["mito"])
 add("granules", sdf_mesh(load(D / "gran10").astype(bool), target=40000, sigma=0.5), C["granules"])
-add("dense_on_crystal", sdf_mesh(dense, target=40000, sigma=0.5), C["dense"])
+# dense material layer disabled (2026-11-26): picks up membranes / curtaining outside run0910, not validated
 for ply in sorted((O / "clem").glob("*.ply")) if (O / "clem").exists() else []:  # CLEM LM channels (19)
     me = trimesh.load(ply)
     add(f"LM_{ply.stem}", me, tuple(int(x) for x in me.visual.face_colors[0][:3]))

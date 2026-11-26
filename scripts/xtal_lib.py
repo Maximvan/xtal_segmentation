@@ -22,6 +22,11 @@ RUNS = {
 DERIVED = ROOT / "01_Input/derived"
 for _n in ("largeXtal_cM", "smallXtal_6M", "smallXtal_6D2P"):
     RUNS[_n] = dict(bin4=DERIVED / f"{_n}_20nm.tif", bin2=DERIVED / f"{_n}_10nm.tif")
+# destriped stacks (20_destripe.py: per-slice two-point contrast correction) replace the originals when present
+for _n, _d in RUNS.items():
+    if (DERIVED / f"{_n}_ds_10nm.tif").exists() and (DERIVED / f"{_n}_ds_20nm.tif").exists():
+        _d["bin2_orig"], _d["bin4_orig"] = _d["bin2"], _d["bin4"]
+        _d["bin2"], _d["bin4"] = DERIVED / f"{_n}_ds_10nm.tif", DERIVED / f"{_n}_ds_20nm.tif"
 VX = 0.02  # um, working grid
 NT = 16    # CPU threads
 

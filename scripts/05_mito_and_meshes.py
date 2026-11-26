@@ -114,7 +114,7 @@ add("mitochondria", mesh(ml > 0, step=1 if not TEN else 2, target=50000, sigma=0
 z0 = np.zeros(3)
 if TEN and (D / "dense10.npz").exists():
     dn = load(D / "dense10").astype(bool)
-    add("dense_on_crystal", mesh(dn, step=1, target=40000, sigma=0.8), C["dense"]); vol["dense_on_crystal"] = dn.sum() * u3
+    vol["dense_on_crystal"] = dn.sum() * u3  # mesh disabled (not validated outside run0910)
     del dn
 if GR10:
     add("granules", mesh(gr, step=1, target=40000, sigma=0.8), C["granules"]); vol["granules"] = gr.sum() * u3

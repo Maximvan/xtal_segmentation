@@ -240,7 +240,7 @@ def evaluate():
         t2[name] = out
         log(name, out)
         k_ = max(1, X.shape[1] // pr.shape[0])  # full-res input (17): show on the prediction grid
-        o = np.stack([np.clip((X[1, ::k_, ::k_][:h, :w] - 110) / 105 * 255, 0, 255)] * 3, -1).astype(np.uint8)
+        o = np.stack([np.clip((X[X.shape[0] // 2, ::k_, ::k_][:h, :w] - 110) / 105 * 255, 0, 255)] * 3, -1).astype(np.uint8)
         o[sac] = (0.5 * o[sac] + 0.5 * np.array((240, 228, 66))).astype(np.uint8)
         o[find_boundaries(cr)] = (0, 0, 160)
         for k, col in (("vacuole", (0, 0, 0)), ("crystal", (213, 94, 0))):

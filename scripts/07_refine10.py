@@ -79,7 +79,9 @@ del fg
 
 n_surf = n_cov = lum_vox = cr_vox = dense_vox = n_dense = n_vac = 0
 cov, thick = {}, []
-CH, HALO = 128, 24
+HALO = 24
+CH = int(np.clip(150e6 // (n10[1] * n10[2]), 32, 128))  # slices per chunk: keep GPU memory bounded for wide crops
+log("chunk slices", CH)
 for c0 in range(0, n10[0], CH):
     c1 = min(c0 + CH, n10[0])
     a0, a1 = max(0, c0 - HALO) // 2 * 2, min(n10[0], c1 + HALO + 1) // 2 * 2

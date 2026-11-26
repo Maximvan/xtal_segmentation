@@ -31,21 +31,42 @@ for z, X in m13.run_slices(run, range(Z)):
     sac[z] = am == 2
     if z % 200 == 0:
         log("slice", z, "/", Z, "crystal px", int(cry[z].sum()), "sac px", int(sac[z].sum()))
-# light 3D consistency, remove specks, fill holes
-cry = ndi.binary_opening(cry, structure=np.ones((3, 3, 3)))
-lab = cc3d.connected_components(cry, connectivity=6)
+def down2(m):
+    """2x2x2 majority downsample, slice pair by slice pair (no huge float intermediates)"""
+    z2, h2, w2 = m.shape[0] // 2, m.shape[1] // 2, m.shape[2] // 2
+    out = np.zeros((z2, h2, w2), bool)
+    for k in range(z2):
+        a = m[2 * k, :2 * h2, :2 * w2].astype(np.uint8) + m[2 * k + 1, :2 * h2, :2 * w2]
+        out[k] = a.reshape(h2, 2, w2, 2).sum((1, 3)) >= 4
+    return out
+
+
+# remove specks: decide which crystal bodies to keep on a 2x coarser grid (memory-light for 10 GVox runs),
+# then apply at 10 nm; fill holes slice by slice
+z2, h2, w2 = Z // 2, H // 2, W // 2
+c2 = down2(cry)
+c2 = ndi.binary_opening(c2, structure=np.ones((3, 3, 3)))
+lab = cc3d.connected_components(c2, connectivity=6)
 cnt = cc3d.statistics(lab)["voxel_counts"]
-keep = np.where(cnt >= MIN_UM3 * 1e6)[0]; keep = keep[keep > 0]
-cry = fill_holes3d(np.isin(lab, keep))
-del lab
-log("crystals kept", len(keep), "volumes um3", sorted([round(float(c) * 1e-6, 2) for c in cnt[keep]], reverse=True)[:10])
+keep = np.where(cnt * 8 >= MIN_UM3 * 1e6)[0]; keep = keep[keep > 0]
+k2 = np.isin(lab, keep)
+del lab, c2
+k2 = ndi.binary_dilation(k2, iterations=2)
+for z in range(2 * z2):  # apply the keep-mask slice by slice
+    cry[z, :2 * h2, :2 * w2] &= k2[z // 2].repeat(2, 0).repeat(2, 1)
+cry[2 * z2:] = False
+del k2
+for z in range(Z):
+    if cry[z].any():
+        cry[z] = ndi.binary_fill_holes(cry[z])
+log("crystals kept", len(keep), "volumes um3 (20 nm grid)", sorted([round(float(c) * 8e-6, 2) for c in cnt[keep]], reverse=True)[:10])
 sac &= ~cry
 save(D / "net_crystal10", cry)
 save(D / "net_sac10", sac)
 # 20 nm grid for 02: mean over 2x2x2 >= 0.5, padded/cropped to img20's shape
 img20 = tifffile.memmap(D / "img20.tif")
 z2, h2, w2 = Z // 2, H // 2, W // 2
-c20 = cry[:2 * z2, :2 * h2, :2 * w2].reshape(z2, 2, h2, 2, w2, 2).mean((1, 3, 5)) >= 0.5
+c20 = down2(cry)
 out = np.zeros(img20.shape, bool)
 s = [min(a, b) for a, b in zip(img20.shape, c20.shape)]
 out[:s[0], :s[1], :s[2]] = c20[:s[0], :s[1], :s[2]]

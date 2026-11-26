@@ -64,9 +64,41 @@ def add(name, me, rgb):
 
 
 ids = [int(i) for i in np.unique(cells) if i > 0]
+def regularise(oc, osac):
+    """3D consistency for the slice-wise native edges (22 refines every slice on its own -> the edge position
+    jitters between slices -> ridges / flakes in 3D). Occupancy is averaged over ~3-5 slices in Z (sub-10 nm XY
+    edge is kept), crystal islands removed and holes filled in 3D; the sac is the smoothed crystal+sac envelope
+    minus the crystal (a closed shell instead of per-slice strips), small loose pieces removed."""
+    import cc3d
+    c = ndi.gaussian_filter(oc.astype(np.float32), (1.5, 0.6, 0.6))
+    m = c > 0.5
+    lab, n = cc3d.connected_components(m, return_N=True, connectivity=6)
+    if n > 1:
+        sz = np.bincount(lab.ravel())[1:]
+        keep = np.zeros(n + 1, bool); keep[1:] = sz >= 0.01 * sz.max()
+        c[m & ~keep[lab]] = 0
+        m = keep[lab]
+    del lab
+    h = ndi.binary_fill_holes(m) & ~m
+    c[h] = 1; del h, m
+    env = np.minimum(oc.astype(np.float32) + osac.astype(np.float32), 1)
+    env = ndi.gaussian_filter(env, (2.0, 0.8, 0.8))
+    s = np.minimum(env, 1 - c); del env
+    ms = s > 0.5
+    lab, n = cc3d.connected_components(ms, return_N=True, connectivity=26)
+    if n > 1:
+        sz = np.bincount(lab.ravel())[1:]
+        small = np.zeros(n + 1, bool); small[1:] = sz < 20000          # < 0.02 um3 loose pieces
+        s[small[lab]] = 0
+    print("regularised: crystal %.1f um3, sac %.1f um3 (before %.1f / %.1f)" % (
+        (c > 0.5).sum() * 1e-6, (s > 0.5).sum() * 1e-6, oc.astype(np.float32).sum() * 1e-6,
+        osac.astype(np.float32).sum() * 1e-6), flush=True)
+    return c, s
+
+
 def occ_mesh(occ, b10, target):
     """marching cubes at 50 % occupancy of native-resolution masks on the 10 nm grid (sub-voxel accurate)"""
-    o = np.pad(ndi.gaussian_filter(occ.astype(np.float32), 0.5), 1)
+    o = np.pad(ndi.gaussian_filter(occ.astype(np.float32), 0.5), 1)  # (regularised already)
     if o.max() < 0.5:
         return None
     v, f, _, _ = marching_cubes(o, 0.5)
@@ -81,8 +113,10 @@ def occ_mesh(occ, b10, target):
 
 if (D / "native_occ10.npz").exists():  # crystal + sac from the native-resolution U-Net (18)
     nat = np.load(D / "native_occ10.npz")
-    add("crystal", occ_mesh(nat["crystal"], nat["bbox10"], 50000), C["crystal"])
-    add("vacuole_crystal", occ_mesh(nat["sac"], nat["bbox10"], 60000), C["vacuole"])
+    oc_, os_ = regularise(nat["crystal"], nat["sac"])
+    add("crystal", occ_mesh(oc_, nat["bbox10"], 50000), C["crystal"])
+    add("vacuole_crystal", occ_mesh(os_, nat["bbox10"], 60000), C["vacuole"])
+    del oc_, os_
     print("crystal + sac meshes from native resolution", flush=True)
 else:
     add("crystal", sdf_mesh(cr, target=50000), C["crystal"])

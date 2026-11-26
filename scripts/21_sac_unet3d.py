@@ -133,7 +133,7 @@ def predict_slice(net, X16, tile=768):
                 y1, x1 = min(y0 + tile, Hh), min(x0 + tile, Ww)
                 a = X16[:, y0:y1, x0:x1]
                 ph, pw = (-a.shape[1]) % 8, (-a.shape[2]) % 8
-                x = F.pad(torch.from_numpy(np.ascontiguousarray(a)).float().cuda()[None, None] / 255., (0, pw, 0, ph), mode="replicate")
+                x = F.pad(torch.from_numpy(np.ascontiguousarray(a)).float().cuda()[None, None] / 255., (0, pw, 0, ph, 0, 0), mode="replicate")
                 p = 0
                 for r in range(4):
                     with torch.autocast("cuda", dtype=torch.bfloat16):
